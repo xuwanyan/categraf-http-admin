@@ -1,0 +1,26 @@
+[Unit]
+Description=Categraf HTTP 拨测管理服务
+Documentation=https://github.com/flashcatcloud/categraf
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/categraf
+
+# 数据文件放 categraf 配置目录下，方便管理
+ExecStart=/etc/categraf/categraf-http-admin \
+  -data /etc/categraf/conf/input.http_response/targets.json
+
+# 从 .env 文件读取认证信息
+EnvironmentFile=/etc/categraf/.env
+
+# 重启策略
+Restart=always
+RestartSec=5
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
