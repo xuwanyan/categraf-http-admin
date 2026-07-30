@@ -70,7 +70,7 @@ tr:hover { background: #f8f9ff; }
 <strong>配置方式：</strong>
 Categraf <code>conf/config.toml</code> →
 <code>providers = ["local", "http"]</code> +
-<code>[http_provider] remote_url = "http://你的IP:{{.Port}}/api/config/http_response"</code>
+<code>[http_provider] remote_url = "http://你的IP:{{.Port}}/api/config/http_response"</code>（同时下发网站与端口拨测）
 </div>
 
 
@@ -78,10 +78,28 @@ Categraf <code>conf/config.toml</code> →
 <h2>添加目标</h2>
 <form action="/api/targets" method="POST">
 <div class="form-row">
+<div class="form-group" style="max-width:150px">
+<label>拨测类型</label>
+<select name="kind" id="addKind" onchange="toggleKind()">
+<option value="http">网站 HTTP(S)</option>
+<option value="net">端口 TCP/UDP</option>
+</select>
+</div>
 <div class="form-group" style="flex:3">
-<label>URL *</label>
+<label id="addUrlLabel">URL *</label>
 <input type="url" name="url" id="addUrl" placeholder="https://example.com" required oninput="checkTLS('add')">
 </div>
+<div class="form-group">
+<label>名称</label>
+<input type="text" name="job" placeholder="myapp" list="jobList" required>
+<datalist id="jobList">
+{{range .Jobs}}<option value="{{.}}">{{end}}
+</datalist>
+</div>
+</div>
+
+<div id="addHttpFields">
+<div class="form-row">
 <div class="form-group">
 <label>请求方法</label>
 <select name="method" id="addMethod" onchange="toggleExtra('add')">
@@ -93,15 +111,8 @@ Categraf <code>conf/config.toml</code> →
 </select>
 </div>
 <div class="form-group">
-<label>网站名称</label>
-<input type="text" name="job" placeholder="myapp" list="jobList" required>
-<datalist id="jobList">
-{{range .Jobs}}<option value="{{.}}">{{end}}
-</datalist>
-</div>
-<div class="form-group">
 <label>期望状态码</label>
-<input type="text" name="expected_status_codes" value="200" placeholder="200|301">
+<input type="text" name="expected_status_codes" value="200" placeholder="200|301" required pattern="\d{3}(\|\d{3})*" title="三位数字，多值用|分隔，如 200 或 200|301">
 </div>
 			<div class="form-group">
 			<label>超时时长</label>
@@ -140,12 +151,61 @@ Categraf <code>conf/config.toml</code> →
 <div class="tls-fields" id="addTlsFields">
 <div class="form-row">
 <div class="form-group checkbox">
-<input type="checkbox" name="use_tls" id="addUseTLS" value="true" onchange="toggleTLSCA('add')">
-<label for="addUseTLS">使用 TLS</label>
+<input type="checkbox" name="insecure_skip_verify" id="addSkipVerify" value="true" onchange="toggleSkip('add')">
+<label for="addSkipVerify" title="临时跳过证书校验（证书过期/自签名可用，不建议长期开启）">⚠️ 跳过证书校验</label>
 </div>
-<div class="form-group" style="flex:2;display:none" id="addTLScaGroup">
-<label>TLS CA 证书路径</label>
-<input type="text" name="tls_ca" placeholder="/etc/categraf/ca.pem">
+</div>
+<div style="margin-top:4px">
+<a href="javascript:void(0)" id="addCaToggle" onclick="toggleCaAdvanced('add')" style="font-size:12px;color:#1a73e8;text-decoration:none">▸ 使用私有 CA 证书校验（高级，仅内网自建 CA 需要）</a>
+</div>
+<div class="form-row" id="addCaGroup" style="display:none;margin-top:8px">
+<div class="form-group" style="flex:2">
+<label>TLS CA 证书路径（categraf 服务器本地路径）</label>
+<input type="text" name="tls_ca" id="addTlsCa" placeholder="/etc/categraf/ca.pem">
+</div>
+</div>
+</div>
+</div>
+
+<div id="addNetFields" style="display:none">
+<div class="form-row">
+<div class="form-group" style="max-width:130px">
+<label>协议</label>
+<select name="protocol" id="addProtocol" disabled onchange="netProtoHint()">
+<option value="tcp">TCP</option>
+<option value="udp">UDP</option>
+</select>
+</div>
+<div class="form-group" style="max-width:130px">
+<label>连接超时</label>
+<select name="response_timeout" disabled>
+<option value="">默认(1s)</option>
+<option value="3s">3s</option>
+<option value="5s">5s</option>
+<option value="10s">10s</option>
+</select>
+</div>
+</div>
+<div id="addUdpHint" style="display:none;font-size:12px;color:#b3261e;margin-bottom:8px">⚠️ UDP 无连接：不配置下方“发送与响应匹配”时判活不可靠，强烈建议配置</div>
+<div style="margin-top:4px">
+<a href="javascript:void(0)" id="addNetAdvToggle" onclick="toggleNetAdv()" style="font-size:12px;color:#1a73e8;text-decoration:none">▸ 发送与响应匹配（高级，验证服务真实可用，UDP 判活必需）</a>
+</div>
+<div class="form-row" id="addNetAdvGroup" style="display:none;margin-top:8px">
+<div class="form-group">
+<label>发送内容 (send，支持 \r \n \t 转义)</label>
+<input type="text" name="send" disabled placeholder="\r\n">
+</div>
+<div class="form-group">
+<label>期望响应包含 (expect)</label>
+<input type="text" name="expect" disabled placeholder="PONG">
+</div>
+<div class="form-group" style="max-width:130px">
+<label>读超时</label>
+<select name="read_timeout" disabled>
+<option value="">默认(3s)</option>
+<option value="5s">5s</option>
+<option value="10s">10s</option>
+</select>
 </div>
 </div>
 </div>
@@ -162,10 +222,11 @@ Categraf <code>conf/config.toml</code> →
 <table id="targetTable">
 <thead>
 <tr>
-<th style="width:28%">URL</th>
-<th>方法</th>
-<th>网站名称</th>
-<th>状态码</th>
+<th>类型</th>
+<th style="width:26%">目标</th>
+<th>方法/协议</th>
+<th>名称</th>
+<th>检查</th>
 <th>TLS</th>
 <th style="width:130px">操作</th>
 </tr>
@@ -173,11 +234,12 @@ Categraf <code>conf/config.toml</code> →
 <tbody>
 {{range .Targets}}
 <tr id="row-{{.ID}}">
+<td>{{if eq .Kind "net"}}<span class="badge" style="background:#fef7e0;color:#b06000">端口</span>{{else}}<span class="badge">网站</span>{{end}}</td>
 <td class="url-cell" style="word-break:break-all;font-family:monospace;font-size:13px">{{.URL}}</td>
-<td><span class="badge">{{.Method}}</span></td>
+<td><span class="badge">{{if eq .Kind "net"}}{{.Protocol}}{{else}}{{.Method}}{{end}}</span></td>
 <td>{{.Job}}</td>
-<td>{{.ExpectedStatusCodes}}</td>
-<td>{{if .UseTLS}}🔒{{else}}-{{end}}</td>
+<td>{{if eq .Kind "net"}}{{if .Expect}}含“{{escCtl .Expect}}”{{else}}连通{{end}}{{else}}{{.ExpectedStatusCodes}}{{end}}</td>
+<td>{{if eq .Kind "net"}}-{{else if .InsecureSkipVerify}}⚠️跳过校验{{else if .TLSCA}}🔒私有CA{{else}}-{{end}}</td>
 <td class="actions">
 <button class="btn btn-sm btn-outline" onclick="editRow('{{.ID}}')">编辑</button>
 <form action="/api/targets/{{.ID}}/delete" method="POST" style="display:inline" onsubmit="return confirm('确定删除?')">
@@ -185,8 +247,65 @@ Categraf <code>conf/config.toml</code> →
 </form>
 </td>
 </tr>
+{{if eq .Kind "net"}}
 <tr id="edit-{{.ID}}" class="edit-row">
-<td colspan="6">
+<td colspan="7">
+<form class="edit-form" onsubmit="saveEdit('{{.ID}}');return false">
+<div class="form-row">
+<div class="form-group" style="flex:2">
+<label>目标地址 (host:port)</label>
+<input class="edit-input" name="url" value="{{.URL}}" required>
+</div>
+<div class="form-group">
+<label>名称</label>
+<input class="edit-input" name="job" value="{{.Job}}" required>
+</div>
+<div class="form-group">
+<label>协议</label>
+<select class="edit-select" name="protocol">
+<option value="tcp" {{if eq .Protocol "tcp"}}selected{{end}}>TCP</option>
+<option value="udp" {{if eq .Protocol "udp"}}selected{{end}}>UDP</option>
+</select>
+</div>
+<div class="form-group">
+<label>连接超时</label>
+<select class="edit-select" name="response_timeout">
+<option value="">默认(1s)</option>
+<option value="3s" {{if eq .ResponseTimeout "3s"}}selected{{end}}>3s</option>
+<option value="5s" {{if eq .ResponseTimeout "5s"}}selected{{end}}>5s</option>
+<option value="10s" {{if eq .ResponseTimeout "10s"}}selected{{end}}>10s</option>
+</select>
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>发送内容 (send，支持 \r \n \t 转义)</label>
+<input class="edit-input" name="send" value="{{escCtl .Send}}" placeholder="\r\n">
+</div>
+<div class="form-group">
+<label>期望响应包含 (expect)</label>
+<input class="edit-input" name="expect" value="{{escCtl .Expect}}" placeholder="PONG">
+</div>
+<div class="form-group" style="max-width:130px">
+<label>读超时</label>
+<select class="edit-select" name="read_timeout">
+<option value="">默认(3s)</option>
+<option value="5s" {{if eq .ReadTimeout "5s"}}selected{{end}}>5s</option>
+<option value="10s" {{if eq .ReadTimeout "10s"}}selected{{end}}>10s</option>
+</select>
+</div>
+</div>
+<div class="form-actions">
+<button type="submit" class="btn btn-sm btn-primary">保存</button>
+<button type="button" class="btn btn-sm btn-outline" onclick="cancelEdit('{{.ID}}')">取消</button>
+<span id="edit-status-{{.ID}}" style="font-size:13px;margin-left:10px"></span>
+</div>
+</form>
+</td>
+</tr>
+{{else}}
+<tr id="edit-{{.ID}}" class="edit-row">
+<td colspan="7">
 <form class="edit-form" onsubmit="saveEdit('{{.ID}}');return false">
 <div class="form-row">
 <div class="form-group" style="flex:3">
@@ -209,7 +328,7 @@ Categraf <code>conf/config.toml</code> →
 </div>
 <div class="form-group">
 <label>期望状态码</label>
-<input class="edit-input" name="expected_status_codes" value="{{.ExpectedStatusCodes}}">
+<input class="edit-input" name="expected_status_codes" value="{{.ExpectedStatusCodes}}" required pattern="\d{3}(\|\d{3})*" title="三位数字，多值用|分隔，如 200 或 200|301">
 t		</div>
 			<div class="form-group">
 			<label>超时时长</label>
@@ -244,12 +363,17 @@ t		</div>
 <div class="tls-fields" id="editTls-{{.ID}}" style="{{if isHTTPS .URL}}display:block;margin-top:8px{{else}}display:none{{end}}">
 <div class="form-row">
 <div class="form-group checkbox">
-<input type="checkbox" class="edit-checkbox" name="use_tls" id="edit-utls-{{.ID}}" value="true" {{if .UseTLS}}checked{{end}} onchange="toggleEditTLSCA('{{.ID}}')">
-<label for="edit-utls-{{.ID}}">使用 TLS</label>
+<input type="checkbox" class="edit-checkbox" name="insecure_skip_verify" id="edit-skipv-{{.ID}}" value="true" {{if .InsecureSkipVerify}}checked{{end}} onchange="toggleSkipEdit('{{.ID}}')">
+<label for="edit-skipv-{{.ID}}" title="临时跳过证书校验（证书过期/自签名可用，不建议长期开启）">⚠️ 跳过证书校验</label>
 </div>
-<div class="form-group" style="flex:2;{{if .UseTLS}}display:block{{else}}display:none{{end}}" id="editTLSca-{{.ID}}">
-<label>TLS CA 证书路径</label>
-<input class="edit-input" name="tls_ca" value="{{.TLSCA}}" placeholder="/etc/categraf/ca.pem">
+</div>
+<div style="margin-top:4px">
+<a href="javascript:void(0)" id="edit-catoggle-{{.ID}}" onclick="toggleCaAdvancedEdit('{{.ID}}')" style="font-size:12px;color:#1a73e8;text-decoration:none">▸ 使用私有 CA 证书校验（高级）</a>
+</div>
+<div class="form-row" id="edit-cagroup-{{.ID}}" style="{{if .TLSCA}}display:flex{{else}}display:none{{end}};margin-top:8px">
+<div class="form-group" style="flex:2">
+<label>TLS CA 证书路径（categraf 服务器本地路径）</label>
+<input class="edit-input" name="tls_ca" id="edit-tlsca-{{.ID}}" value="{{.TLSCA}}" placeholder="/etc/categraf/ca.pem">
 </div>
 </div>
 </div>
@@ -262,6 +386,7 @@ t		</div>
 </td>
 </tr>
 {{end}}
+{{end}}
 </tbody>
 </table>
 {{else}}
@@ -271,10 +396,14 @@ t		</div>
 
 <div class="card">
 <h2>当前生成的 TOML 配置</h2>
-<div class="copy-area">{{.TOML}}</div>
+<div style="font-size:13px;font-weight:600;margin-top:4px">http_response（网站拨测）</div>
+<div class="copy-area" id="tomlHttp">{{.TOML}}</div>
+<div style="font-size:13px;font-weight:600;margin-top:12px">net_response（端口拨测）</div>
+<div class="copy-area" id="tomlNet">{{.NetTOML}}</div>
 <div style="margin-top:8px;font-size:12px;color:#888">
 version: {{.Version}}
-<button class="btn btn-sm" style="background:#f1f3f4;margin-left:10px" onclick="navigator.clipboard.writeText(document.querySelector('.copy-area').textContent).then(()=>alert('已复制'))">📋 复制</button>
+<button class="btn btn-sm" style="background:#f1f3f4;margin-left:10px" onclick="copyToml('tomlHttp')">📋 复制 http</button>
+<button class="btn btn-sm" style="background:#f1f3f4;margin-left:6px" onclick="copyToml('tomlNet')">📋 复制 net</button>
 </div>
 </div>
 
@@ -285,15 +414,54 @@ function isHTTPS(url) {
   return url.trim().toLowerCase().startsWith('https://');
 }
 
+// 添加表单：网站/端口两套字段切换（隐藏侧统一 disabled，避免提交和 required 校验）
+function toggleKind() {
+  var isNet = document.getElementById('addKind').value === 'net';
+  var http = document.getElementById('addHttpFields');
+  var net = document.getElementById('addNetFields');
+  http.style.display = isNet ? 'none' : 'block';
+  net.style.display = isNet ? 'block' : 'none';
+  http.querySelectorAll('input,select,textarea').forEach(function(el) { el.disabled = isNet; });
+  net.querySelectorAll('input,select,textarea').forEach(function(el) { el.disabled = !isNet; });
+  var url = document.getElementById('addUrl');
+  if (isNet) {
+    url.type = 'text';
+    url.placeholder = '10.0.0.1:22（host:port）';
+    document.getElementById('addUrlLabel').textContent = '目标地址 *';
+    netProtoHint();
+  } else {
+    url.type = 'url';
+    url.placeholder = 'https://example.com';
+    document.getElementById('addUrlLabel').textContent = 'URL *';
+    checkTLS('add');
+  }
+}
+
+function netProtoHint() {
+  var isUdp = document.getElementById('addProtocol').value === 'udp';
+  document.getElementById('addUdpHint').style.display = isUdp ? 'block' : 'none';
+}
+
+function toggleNetAdv() {
+  var g = document.getElementById('addNetAdvGroup');
+  var show = g.style.display === 'none';
+  g.style.display = show ? 'flex' : 'none';
+  document.getElementById('addNetAdvToggle').innerHTML =
+    (show ? '▾' : '▸') + ' 发送与响应匹配（高级，验证服务真实可用，UDP 判活必需）';
+}
+
 function checkTLS(prefix) {
+  if (prefix === 'add' && document.getElementById('addKind').value === 'net') return;
   var url = document.getElementById(prefix + 'Url').value;
   var el = document.getElementById(prefix + 'TlsFields');
   if (isHTTPS(url)) {
     el.style.display = 'block';
   } else {
     el.style.display = 'none';
-    document.getElementById(prefix + 'UseTLS').checked = false;
-    document.getElementById(prefix + 'TLScaGroup').style.display = 'none';
+    document.getElementById(prefix + 'SkipVerify').checked = false;
+    document.getElementById(prefix + 'TlsCa').value = '';
+    document.getElementById(prefix + 'CaGroup').style.display = 'none';
+    document.getElementById(prefix + 'CaToggle').innerHTML = '▸ 使用私有 CA 证书校验（高级，仅内网自建 CA 需要）';
   }
 }
 
@@ -303,9 +471,30 @@ function toggleExtra(prefix) {
   el.className = method === 'POST' ? 'extra-fields show-extra' : 'extra-fields';
 }
 
-function toggleTLSCA(prefix) {
-  var checked = document.getElementById(prefix + 'UseTLS').checked;
-  document.getElementById(prefix + 'TLScaGroup').style.display = checked ? 'block' : 'none';
+// 跳过校验与 CA 互斥：勾跳过时置灰并清空 CA
+function toggleSkip(prefix) {
+  var skip = document.getElementById(prefix + 'SkipVerify').checked;
+  var ca = document.getElementById(prefix + 'TlsCa');
+  var toggle = document.getElementById(prefix + 'CaToggle');
+  if (skip) {
+    ca.value = '';
+    ca.disabled = true;
+    document.getElementById(prefix + 'CaGroup').style.display = 'none';
+    toggle.style.pointerEvents = 'none';
+    toggle.style.color = '#bbb';
+  } else {
+    ca.disabled = false;
+    toggle.style.pointerEvents = 'auto';
+    toggle.style.color = '#1a73e8';
+  }
+}
+
+function toggleCaAdvanced(prefix) {
+  var g = document.getElementById(prefix + 'CaGroup');
+  var show = g.style.display === 'none';
+  g.style.display = show ? 'flex' : 'none';
+  document.getElementById(prefix + 'CaToggle').innerHTML =
+    (show ? '▾' : '▸') + ' 使用私有 CA 证书校验（高级，仅内网自建 CA 需要）';
 }
 
 function checkTLSEdit(id) {
@@ -313,22 +502,67 @@ function checkTLSEdit(id) {
   var el = document.getElementById('editTls-' + id);
   el.style.display = isHTTPS(url) ? 'block' : 'none';
   if (!isHTTPS(url)) {
-    document.getElementById('edit-utls-' + id).checked = false;
-    document.getElementById('editTLSca-' + id).style.display = 'none';
+    document.getElementById('edit-skipv-' + id).checked = false;
+    document.getElementById('edit-tlsca-' + id).value = '';
+    document.getElementById('edit-cagroup-' + id).style.display = 'none';
   }
 }
 
-function toggleEditTLSCA(id) {
-  var checked = document.getElementById('edit-utls-' + id).checked;
-  var el = document.getElementById('editTLSca-' + id);
-  el.style.display = checked ? 'block' : 'none';
+function toggleSkipEdit(id) {
+  var skip = document.getElementById('edit-skipv-' + id).checked;
+  var ca = document.getElementById('edit-tlsca-' + id);
+  var toggle = document.getElementById('edit-catoggle-' + id);
+  if (skip) {
+    ca.value = '';
+    ca.disabled = true;
+    document.getElementById('edit-cagroup-' + id).style.display = 'none';
+    toggle.style.pointerEvents = 'none';
+    toggle.style.color = '#bbb';
+  } else {
+    ca.disabled = false;
+    toggle.style.pointerEvents = 'auto';
+    toggle.style.color = '#1a73e8';
+  }
+}
+
+function toggleCaAdvancedEdit(id) {
+  var g = document.getElementById('edit-cagroup-' + id);
+  var show = g.style.display === 'none';
+  g.style.display = show ? 'flex' : 'none';
+  document.getElementById('edit-catoggle-' + id).innerHTML =
+    (show ? '▾' : '▸') + ' 使用私有 CA 证书校验（高级）';
 }
 
 function editRow(id) {
   document.getElementById('row-' + id).style.display = 'none';
   document.getElementById('edit-' + id).className = 'edit-active';
-  // 编辑模式检查TLS
-  checkTLSEdit(id);
+  // 网站拨测行才有 TLS 区块；端口拨测行无需处理
+  if (document.getElementById('editTls-' + id)) {
+    checkTLSEdit(id);
+    toggleSkipEdit(id);
+  }
+}
+
+function copyToml(areaId) {
+  var text = document.getElementById(areaId).textContent;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function() { alert('已复制'); });
+    return;
+  }
+  // 非 HTTPS/localhost 环境下 clipboard API 不可用，降级用 execCommand
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    alert('已复制');
+  } catch (e) {
+    alert('复制失败，请手动选择文本复制');
+  }
+  document.body.removeChild(ta);
 }
 
 function cancelEdit(id) {

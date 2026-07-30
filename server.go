@@ -47,6 +47,10 @@ func handleIndex(store *Store, port int) http.HandlerFunc {
 	funcMap := template.FuncMap{
 		"eq":      func(a, b any) bool { return a == b },
 		"isHTTPS": func(u string) bool { return strings.HasPrefix(strings.ToLower(u), "https://") },
+		// escCtl 把真实控制字符转回 \r \n \t 可见形式，供编辑回显/列表展示（与 store.unescapeCtl 对称）
+		"escCtl": func(s string) string {
+			return strings.NewReplacer("\r", `\r`, "\n", `\n`, "\t", `\t`).Replace(s)
+		},
 	}
 	tmpl := template.Must(template.New("page").Funcs(funcMap).Parse(pageHTML))
 
@@ -74,6 +78,7 @@ func handleIndex(store *Store, port int) http.HandlerFunc {
 			Targets     []Target
 			TargetCount int
 			TOML        string
+			NetTOML     string
 			Version     string
 			Port        int
 			Jobs        []string
@@ -82,6 +87,7 @@ func handleIndex(store *Store, port int) http.HandlerFunc {
 			Targets:     targets,
 			TargetCount: len(targets),
 			TOML:        generateTOML(targets),
+			NetTOML:     generateNetTOML(targets),
 			Version:     store.ConfigVersion(),
 			Port:        port,
 			Jobs:        jobs,
@@ -202,15 +208,21 @@ func handleDeleteTarget(store *Store) http.HandlerFunc {
 func handleCategrafConfig(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		targets := store.All()
-		tomlContent := generateTOML(targets)
 		version := store.ConfigVersion()
 
+		// 同一个 provider URL 同时下发 http_response 和 net_response 两个插件配置
 		resp := map[string]any{
 			"version": version,
 			"configs": map[string]any{
 				"http_response": map[string]any{
 					version: map[string]string{
-						"config": tomlContent,
+						"config": generateTOML(targets),
+						"format": "toml",
+					},
+				},
+				"net_response": map[string]any{
+					version: map[string]string{
+						"config": generateNetTOML(targets),
 						"format": "toml",
 					},
 				},
@@ -235,16 +247,29 @@ func handleHealth(store *Store) http.HandlerFunc {
 
 func targetFromForm(r *http.Request) Target {
 	t := Target{
-		URL:                strings.TrimSpace(r.FormValue("url")),
-		Method:             r.FormValue("method"),
-		Job:                strings.TrimSpace(r.FormValue("job")),
-		ExpectedStatusCodes: r.FormValue("expected_status_codes"),
-		ResponseTimeout:    r.FormValue("response_timeout"),
-		Body:               r.FormValue("body"),
-		FollowRedirects:    r.FormValue("follow_redirects") == "true",
-		UseTLS:             r.FormValue("use_tls") == "true",
-		TLSCA:              r.FormValue("tls_ca"),
+		Kind:            r.FormValue("kind"),
+		URL:             strings.TrimSpace(r.FormValue("url")),
+		Job:             strings.TrimSpace(r.FormValue("job")),
+		ResponseTimeout: r.FormValue("response_timeout"),
 	}
+	if t.Kind == "" {
+		t.Kind = KindHTTP
+	}
+	if t.Kind == KindNet {
+		t.Protocol = r.FormValue("protocol")
+		t.ReadTimeout = r.FormValue("read_timeout")
+		t.Send = r.FormValue("send")
+		t.Expect = r.FormValue("expect")
+		return t
+	}
+
+	t.Method = r.FormValue("method")
+	t.ExpectedStatusCodes = r.FormValue("expected_status_codes")
+	t.Body = r.FormValue("body")
+	t.FollowRedirects = r.FormValue("follow_redirects") == "true"
+	t.TLSCA = strings.TrimSpace(r.FormValue("tls_ca"))
+	t.InsecureSkipVerify = r.FormValue("insecure_skip_verify") == "true"
+	// TLS 字段的互斥与 use_tls 推导统一在 store.normalizeTarget 处理
 	if t.Method == "" {
 		t.Method = "GET"
 	}
