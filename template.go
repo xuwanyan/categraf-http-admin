@@ -315,7 +315,7 @@ Categraf <code>conf/config.toml</code> →
 </div>
 <div class="form-group">
 <label>方法</label>
-<select class="edit-select" name="method">
+<select class="edit-select" name="method" onchange="toggleEditExtra('{{.ID}}')">
 <option value="GET" {{if eq .Method "GET"}}selected{{end}}>GET</option>
 <option value="POST" {{if eq .Method "POST"}}selected{{end}}>POST</option>
 <option value="PUT" {{if eq .Method "PUT"}}selected{{end}}>PUT</option>
@@ -470,6 +470,12 @@ function toggleExtra(prefix) {
   var method = document.getElementById(prefix + 'Method').value;
   var el = document.getElementById(prefix + 'ExtraFields');
   el.className = method === 'POST' ? 'extra-fields show-extra' : 'extra-fields';
+}
+
+function toggleEditExtra(id) {
+  var method = document.querySelector('#edit-' + id + ' select[name="method"]').value;
+  var el = document.getElementById('editExtra-' + id);
+  el.style.display = method === 'POST' ? 'flex' : 'none';
 }
 
 // 跳过校验与 CA 互斥：勾跳过时置灰并清空 CA
