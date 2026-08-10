@@ -331,7 +331,7 @@ func (s *Store) ConfigVersion() string {
 	copy(sorted, s.targets)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 	for _, t := range sorted {
-		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%s|%s|%v|%s|%v|%s|%s|%s|%s", t.ID, t.Kind, t.URL, t.Method, t.Job, t.ExpectedStatusCodes, t.ResponseTimeout, t.UseTLS, t.TLSCA, t.InsecureSkipVerify, t.Protocol, t.ReadTimeout, t.Send, t.Expect)
+		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%s|%s|%v|%s|%v|%s|%s|%s|%s|%s|%s", t.ID, t.Kind, t.URL, t.Method, t.Job, t.ExpectedStatusCodes, t.ResponseTimeout, t.UseTLS, t.TLSCA, t.InsecureSkipVerify, t.Protocol, t.ReadTimeout, t.Send, t.Expect, t.Body, t.HeadersJSON())
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
