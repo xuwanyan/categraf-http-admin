@@ -14,7 +14,6 @@ type configProfile struct {
 	ResponseTimeout     string `json:"response_timeout"`
 	Body                string `json:"body"`
 	Headers             string `json:"headers"`
-	FollowRedirects     bool   `json:"follow_redirects"`
 	UseTLS              bool   `json:"use_tls"`
 	TLSCA               string `json:"tls_ca"`
 	InsecureSkipVerify  bool   `json:"insecure_skip_verify"`
@@ -27,7 +26,6 @@ func profileKey(t Target) string {
 		ResponseTimeout:     t.ResponseTimeout,
 		Body:                t.Body,
 		Headers:             headerKey(t.Headers),
-		FollowRedirects:     t.FollowRedirects,
 		UseTLS:              t.UseTLS,
 		TLSCA:               t.TLSCA,
 		InsecureSkipVerify:  t.InsecureSkipVerify,
@@ -72,7 +70,6 @@ func generateTOML(targets []Target) string {
 					ResponseTimeout:     t.ResponseTimeout,
 					Body:                t.Body,
 					Headers:             headerKey(t.Headers),
-					FollowRedirects:     t.FollowRedirects,
 					UseTLS:              t.UseTLS,
 					TLSCA:               t.TLSCA,
 					InsecureSkipVerify:  t.InsecureSkipVerify,
@@ -134,9 +131,6 @@ func generateTOML(targets []Target) string {
 		// 5xx 也会报 result_code=0，不能省略 200
 		if p.ExpectedStatusCodes != "" {
 			b.WriteString(fmt.Sprintf("expect_response_status_codes = %q\n", p.ExpectedStatusCodes))
-		}
-		if p.FollowRedirects {
-			b.WriteString("follow_redirects = true\n")
 		}
 		if p.Headers != "" {
 			parts := make([]string, 0, len(strings.Split(p.Headers, "\x00")))

@@ -129,12 +129,6 @@ Categraf <code>conf/config.toml</code> →
 			</div>
 </div>
 
-<div class="form-row">
-<div class="form-group checkbox">
-<input type="checkbox" name="follow_redirects" id="addFollowRedirects" value="true">
-<label for="addFollowRedirects">跟随重定向</label>
-</div>
-</div>
 
 <div class="extra-fields" id="addExtraFields">
 <div class="form-row">
@@ -343,12 +337,6 @@ t		</div>
 			<option value="60s" {{if eq .ResponseTimeout "60s"}}selected{{end}}>60s</option>
 			</select>
 			</div>
-</div>
-</div>
-<div class="form-row">
-<div class="form-group checkbox">
-<input type="checkbox" class="edit-checkbox" name="follow_redirects" id="edit-fr-{{.ID}}" value="true" {{if .FollowRedirects}}checked{{end}}>
-<label for="edit-fr-{{.ID}}">跟随重定向</label>
 </div>
 </div>
 <div class="form-row" id="editExtra-{{.ID}}" style="{{if eq .Method "POST"}}display:flex{{else}}display:none{{end}};gap:12px">

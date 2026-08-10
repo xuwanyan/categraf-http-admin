@@ -42,7 +42,6 @@ type Target struct {
 	Job                 string   `json:"job"`
 	ExpectedStatusCodes string   `json:"expected_status_codes,omitempty"`
 	ResponseTimeout     string   `json:"response_timeout,omitempty"`
-	FollowRedirects     bool     `json:"follow_redirects,omitempty"`
 	Headers             []string `json:"headers,omitempty"`
 	Body                string   `json:"body,omitempty"`
 	UseTLS              bool     `json:"use_tls,omitempty"`
@@ -180,7 +179,6 @@ func normalizeTarget(t *Target) error {
 		// 清理 HTTP 拨测专属字段
 		t.Method, t.ExpectedStatusCodes, t.Body = "", "", ""
 		t.Headers = nil
-		t.FollowRedirects = false
 		t.UseTLS, t.TLSCA, t.InsecureSkipVerify = false, "", false
 		t.Send = unescapeCtl(t.Send)
 		t.Expect = unescapeCtl(t.Expect)
@@ -292,7 +290,6 @@ func (s *Store) Update(id string, t Target) (Target, error) {
 		}
 		cur.ResponseTimeout = t.ResponseTimeout
 		cur.Body = t.Body
-		cur.FollowRedirects = t.FollowRedirects
 		cur.UseTLS = t.UseTLS
 		cur.TLSCA = t.TLSCA
 		cur.InsecureSkipVerify = t.InsecureSkipVerify
@@ -334,7 +331,7 @@ func (s *Store) ConfigVersion() string {
 	copy(sorted, s.targets)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 	for _, t := range sorted {
-		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%s|%s|%v|%v|%s|%v|%s|%s|%s|%s", t.ID, t.Kind, t.URL, t.Method, t.Job, t.ExpectedStatusCodes, t.ResponseTimeout, t.FollowRedirects, t.UseTLS, t.TLSCA, t.InsecureSkipVerify, t.Protocol, t.ReadTimeout, t.Send, t.Expect)
+		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%s|%s|%v|%s|%v|%s|%s|%s|%s", t.ID, t.Kind, t.URL, t.Method, t.Job, t.ExpectedStatusCodes, t.ResponseTimeout, t.UseTLS, t.TLSCA, t.InsecureSkipVerify, t.Protocol, t.ReadTimeout, t.Send, t.Expect)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

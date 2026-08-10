@@ -266,7 +266,6 @@ func targetFromForm(r *http.Request) Target {
 	t.Method = r.FormValue("method")
 	t.ExpectedStatusCodes = r.FormValue("expected_status_codes")
 	t.Body = r.FormValue("body")
-	t.FollowRedirects = r.FormValue("follow_redirects") == "true"
 	t.TLSCA = strings.TrimSpace(r.FormValue("tls_ca"))
 	t.InsecureSkipVerify = r.FormValue("insecure_skip_verify") == "true"
 	// TLS 字段的互斥与 use_tls 推导统一在 store.normalizeTarget 处理
