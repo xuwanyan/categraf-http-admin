@@ -203,11 +203,13 @@ func (s *Store) Add(t Target) (Target, error) {
 	if t.Job == "" {
 		return Target{}, fmt.Errorf("job is required")
 	}
+	// URL 不允许重复；Job 仅在同类型（http/net）内不允许重复，
+	// 两种拨测生成不同的指标系列，互不冲突，不应互相限制
 	for _, existing := range s.targets {
 		if existing.URL == t.URL {
 			return Target{}, fmt.Errorf("duplicate url: %s", t.URL)
 		}
-		if existing.Job == t.Job {
+		if existing.Job == t.Job && existing.Kind == t.Kind {
 			return Target{}, fmt.Errorf("duplicate job: %s", t.Job)
 		}
 	}
@@ -264,7 +266,7 @@ func (s *Store) Update(id string, t Target) (Target, error) {
 			if t.URL != "" && existing.URL == t.URL {
 				return Target{}, fmt.Errorf("duplicate url: %s", t.URL)
 			}
-			if t.Job != "" && existing.Job == t.Job {
+			if t.Job != "" && existing.Job == t.Job && existing.Kind == t.Kind {
 				return Target{}, fmt.Errorf("duplicate job: %s", t.Job)
 			}
 		}

@@ -1,35 +1,55 @@
 package main
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"html/template"
 	"net/http"
-	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	sessionCookieName = "ccsid"
 	sessionMaxAge     = 24 * time.Hour
+	tokenLen          = 32 // 256-bit 随机 token
 )
 
 var (
 	authUser string
 	authPass string
-	secret   []byte
 )
+
+// sessionStore 服务端 session 存储
+type sessionStore struct {
+	mu      sync.RWMutex
+	sessions map[string]struct {
+		user     string
+		expires  time.Time
+	}
+}
+
+var sessions = sessionStore{
+	sessions: make(map[string]struct {
+		user     string
+		expires  time.Time
+	}),
+}
+
+// gcSessions 清理过期 session（每次新建时顺带清理，不过频）
+func (s *sessionStore) gc() {
+	now := time.Now()
+	for tok, sess := range s.sessions {
+		if sess.expires.Before(now) {
+			delete(s.sessions, tok)
+		}
+	}
+}
 
 // InitAuth 初始化认证（程序启动时调用）
 func InitAuth(user, pass string) {
 	authUser = user
 	authPass = pass
-	// 生成随机签名密钥
-	secret = make([]byte, 32)
-	rand.Read(secret)
 }
 
 // AuthEnabled 返回是否启用了认证
@@ -57,38 +77,55 @@ func requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// 生成 session token
+// 生成 session token（纯随机字符串，不携带任何明文信息）
 func newSession() string {
-	data := fmt.Sprintf("%s|%d|%s", authUser, time.Now().UnixNano(), authPass)
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(data))
-	sig := hex.EncodeToString(mac.Sum(nil))
-	return hex.EncodeToString([]byte(data)) + "." + sig
+	// 服务端过期清理
+	sessions.mu.Lock()
+	sessions.gc()
+	sessions.mu.Unlock()
+
+	// 生成 256-bit 随机 token
+	buf := make([]byte, tokenLen)
+	rand.Read(buf)
+	token := hex.EncodeToString(buf)
+
+	sessions.mu.Lock()
+	sessions.sessions[token] = struct {
+		user    string
+		expires time.Time
+	}{
+		user:    authUser,
+		expires: time.Now().Add(sessionMaxAge),
+	}
+	sessions.mu.Unlock()
+
+	return token
 }
 
-// 验证 session token
+// 验证 session token（检查是否存在、未过期、且用户名密码未变）
 func validateSession(token string) bool {
-	parts := strings.SplitN(token, ".", 2)
-	if len(parts) != 2 {
+	if token == "" {
 		return false
 	}
-	data, err := hex.DecodeString(parts[0])
-	if err != nil {
+
+	sessions.mu.RLock()
+	sess, ok := sessions.sessions[token]
+	sessions.mu.RUnlock()
+
+	if !ok {
 		return false
 	}
-	// 验证签名
-	mac := hmac.New(sha256.New, secret)
-	mac.Write(data)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(parts[1]), []byte(expected)) {
+
+	// 过期校验
+	if time.Now().After(sess.expires) {
+		sessions.mu.Lock()
+		delete(sessions.sessions, token)
+		sessions.mu.Unlock()
 		return false
 	}
-	// 验证用户名和密码未变
-	pieces := strings.SplitN(string(data), "|", 3)
-	if len(pieces) != 3 {
-		return false
-	}
-	return pieces[0] == authUser && pieces[2] == authPass
+
+	// 用户名/密码未变
+	return sess.user == authUser
 }
 
 // ── 登录页面 ──
@@ -166,6 +203,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    newSession(),
 		Path:     "/",
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionMaxAge.Seconds()),
 	})
 	http.Redirect(w, r, "/", http.StatusFound)

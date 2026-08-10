@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -18,9 +19,9 @@ func newRouter(store *Store, port int) http.Handler {
 	mux.HandleFunc("POST /api/targets/{id}/delete", requireAuth(handleDeleteTarget(store)))
 	mux.HandleFunc("POST /api/targets/{id}/edit", requireAuth(handleEditTarget(store)))
 
-	// API（公开）
-	mux.HandleFunc("GET /api/targets", handleListTargets(store))
-	mux.HandleFunc("DELETE /api/targets/{id}", handleDeleteTarget(store))
+	// API（需认证）
+	mux.HandleFunc("GET /api/targets", requireAuth(handleListTargets(store)))
+	mux.HandleFunc("DELETE /api/targets/{id}", requireAuth(handleDeleteTarget(store)))
 	mux.HandleFunc("GET /api/config/http_response", handleCategrafConfig(store))
 
 	// 登录/登出
@@ -139,7 +140,11 @@ func handleAddTarget(store *Store) http.HandlerFunc {
 			writeJSON(w, 400, map[string]string{"error": "bad form"})
 			return
 		}
-		t := targetFromForm(r)
+		t, err := targetFromForm(r)
+		if err != nil {
+			http.Redirect(w, r, "/?error="+err.Error(), http.StatusFound)
+			return
+		}
 		if _, err := store.Add(t); err != nil {
 			http.Redirect(w, r, "/?error="+err.Error(), http.StatusFound)
 			return
@@ -175,7 +180,11 @@ func handleEditTarget(store *Store) http.HandlerFunc {
 			writeJSON(w, 400, map[string]string{"error": "bad form"})
 			return
 		}
-		t := targetFromForm(r)
+		t, err := targetFromForm(r)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
 		if _, err := store.Update(id, t); err != nil {
 			writeJSON(w, 409, map[string]string{"error": err.Error()})
 			return
@@ -245,7 +254,8 @@ func handleHealth(store *Store) http.HandlerFunc {
 
 // ── 工具 ──
 
-func targetFromForm(r *http.Request) Target {
+// targetFromForm 从表单解析目标，请求头 JSON 格式错误时返回报错
+func targetFromForm(r *http.Request) (Target, error) {
 	t := Target{
 		Kind:            r.FormValue("kind"),
 		URL:             strings.TrimSpace(r.FormValue("url")),
@@ -260,7 +270,7 @@ func targetFromForm(r *http.Request) Target {
 		t.ReadTimeout = r.FormValue("read_timeout")
 		t.Send = r.FormValue("send")
 		t.Expect = r.FormValue("expect")
-		return t
+		return t, nil
 	}
 
 	t.Method = r.FormValue("method")
@@ -277,11 +287,12 @@ func targetFromForm(r *http.Request) Target {
 	}
 	if hs := r.FormValue("headers"); hs != "" {
 		var h []string
-		if err := json.Unmarshal([]byte(hs), &h); err == nil {
-			t.Headers = h
+		if err := json.Unmarshal([]byte(hs), &h); err != nil {
+			return Target{}, fmt.Errorf("请求头 JSON 格式非法: %v", err)
 		}
+		t.Headers = h
 	}
-	return t
+	return t, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
