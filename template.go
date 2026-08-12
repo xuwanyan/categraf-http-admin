@@ -255,14 +255,14 @@ Categraf <code>conf/config.toml</code> →
 <label>名称</label>
 <input class="edit-input" name="job" value="{{.Job}}" required>
 </div>
-<div class="form-group">
+<div class="form-group" style="max-width:130px">
 <label>协议</label>
-<select class="edit-select" name="protocol">
+<select class="edit-select" name="protocol" id="editProto-{{.ID}}" onchange="editNetProtoHint('{{.ID}}')">
 <option value="tcp" {{if eq .Protocol "tcp"}}selected{{end}}>TCP</option>
 <option value="udp" {{if eq .Protocol "udp"}}selected{{end}}>UDP</option>
 </select>
 </div>
-<div class="form-group">
+<div class="form-group" style="max-width:130px">
 <label>连接超时</label>
 <select class="edit-select" name="response_timeout">
 <option value="">默认(1s)</option>
@@ -272,7 +272,11 @@ Categraf <code>conf/config.toml</code> →
 </select>
 </div>
 </div>
-<div class="form-row">
+<div id="editUdpHint-{{.ID}}" style="{{if eq .Protocol "udp"}}display:block{{else}}display:none{{end}};font-size:12px;color:#b3261e;margin-bottom:8px">⚠️ UDP 无连接：不配置下方"发送与响应匹配"时判活不可靠，强烈建议配置</div>
+<div style="margin-top:4px">
+<a href="javascript:void(0)" id="editNetAdvToggle-{{.ID}}" onclick="editNetAdv('{{.ID}}')" style="font-size:12px;color:#1a73e8;text-decoration:none">▸ 发送与响应匹配（高级，验证服务真实可用，UDP 判活必需）</a>
+</div>
+<div class="form-row" id="editNetAdvGroup-{{.ID}}" style="display:none;margin-top:8px">
 <div class="form-group">
 <label>发送内容 (send，支持 \r \n \t 转义)</label>
 <input class="edit-input" name="send" value="{{escCtl .Send}}" placeholder="\r\n">
@@ -528,13 +532,28 @@ function toggleCaAdvancedEdit(id) {
     (show ? '▾' : '▸') + ' 使用私有 CA 证书校验（高级）';
 }
 
+function editNetProtoHint(id) {
+  var isUdp = document.getElementById('editProto-' + id).value === 'udp';
+  document.getElementById('editUdpHint-' + id).style.display = isUdp ? 'block' : 'none';
+}
+
+function editNetAdv(id) {
+  var g = document.getElementById('editNetAdvGroup-' + id);
+  var show = g.style.display === 'none';
+  g.style.display = show ? 'flex' : 'none';
+  document.getElementById('editNetAdvToggle-' + id).innerHTML =
+    (show ? '▾' : '▸') + ' 发送与响应匹配（高级，验证服务真实可用，UDP 判活必需）';
+}
+
 function editRow(id) {
   document.getElementById('row-' + id).style.display = 'none';
   document.getElementById('edit-' + id).className = 'edit-active';
-  // 网站拨测行才有 TLS 区块；端口拨测行无需处理
   if (document.getElementById('editTls-' + id)) {
     checkTLSEdit(id);
     toggleSkipEdit(id);
+  } else if (document.getElementById('editProto-' + id)) {
+    // 端口拨测行：初始化 UDP 提示
+    editNetProtoHint(id);
   }
 }
 
