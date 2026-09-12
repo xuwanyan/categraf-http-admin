@@ -3,3 +3,4 @@ categraf-http-admin
 targets.json
 *.bak
 sandbox-cli/
+.env
