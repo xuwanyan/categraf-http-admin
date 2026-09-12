@@ -112,7 +112,11 @@ func loadEnv(path string) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		// TrimLeft 去 UTF-8 BOM（U+FEFF）：PowerShell 的 Set-Content -Encoding UTF8
+		// 会在文件头写 BOM，TrimSpace 不认它，会让第一行 key 变成 U+FEFF+CONFIG_USER，
+		// 导致 os.Getenv("CONFIG_USER") 查不到、页面认证静默失效。
+		// 用 rune(0xFEFF) 而非裸字面量，避免源码里出现非法 BOM 字节。
+		line := strings.TrimSpace(strings.TrimLeft(scanner.Text(), string(rune(0xFEFF))))
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
