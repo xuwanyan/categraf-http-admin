@@ -2,9 +2,11 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"html/template"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,21 +20,25 @@ const (
 var (
 	authUser string
 	authPass string
+
+	// categrafToken 是 categraf http_provider 拉取配置用的独立 token，
+	// 与登录账密解耦：登录密码不会出现在 categraf 的 config.toml 里。
+	categrafToken string
 )
 
 // sessionStore 服务端 session 存储
 type sessionStore struct {
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	sessions map[string]struct {
-		user     string
-		expires  time.Time
+		user    string
+		expires time.Time
 	}
 }
 
 var sessions = sessionStore{
 	sessions: make(map[string]struct {
-		user     string
-		expires  time.Time
+		user    string
+		expires time.Time
 	}),
 }
 
@@ -217,4 +223,43 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge: -1,
 	})
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// ── categraf http_provider 拉取认证 ──
+
+// InitCategrafToken 初始化 categraf 拉取 token（程序启动时调用）
+func InitCategrafToken(tok string) {
+	categrafToken = tok
+}
+
+// CategrafTokenEnabled 返回是否启用了 categraf 拉取认证
+func CategrafTokenEnabled() bool {
+	return categrafToken != ""
+}
+
+// safeEqual 常量时间比较，防止时序侧信道泄露 token 长度/前缀
+func safeEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// requireCategrafToken 只保护 categraf http_provider 拉取端点
+// (/api/config/http_response)。
+//
+// 仅接受 Authorization: Bearer <token> 请求头——不走 query，避免 token
+// 落进 URL / access log / 浏览器历史。未配 CATEGRAF_TOKEN 时端点公开
+// （向后兼容已有部署）。
+func requireCategrafToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !CategrafTokenEnabled() {
+			next(w, r)
+			return
+		}
+		h := r.Header.Get("Authorization")
+		if strings.HasPrefix(h, "Bearer ") && safeEqual(strings.TrimPrefix(h, "Bearer "), categrafToken) {
+			next(w, r)
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Bearer realm="categraf"`)
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+	}
 }

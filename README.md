@@ -32,12 +32,17 @@ scp categraf-http-admin.service root@服务器:/etc/systemd/system/
 ### 2. 创建认证配置
 
 ```bash
-cat > /etc/categraf/.env << 'EOF'
+# 生成 categraf 拉取用的独立 token（32 字节 hex）
+TOK=$(openssl rand -hex 32)
+cat > /etc/categraf/.env << EOF
 CONFIG_USER=admin
 CONFIG_PASS=你的密码
+CATEGRAF_TOKEN=$TOK
 EOF
 chmod 600 /etc/categraf/.env
 ```
+
+> `CATEGRAF_TOKEN` 是 categraf 拉取配置端点的独立凭据，与登录账密解耦：登录密码只用于 Web 页面登录，categraf 的 `config.toml` 里只放这个 token。不设 `CATEGRAF_TOKEN` 则 `/api/config/http_response` 公开（不推荐）。
 
 ### 3. 启动服务
 
@@ -55,9 +60,12 @@ providers = ["local", "http"]
 
 [http_provider]
 remote_url = "http://你的服务器IP:5000/api/config/http_response"
+headers = ["Authorization", "Bearer <你的CATEGRAF_TOKEN>"]
 timeout = 5
 reload_interval = 60
 ```
+
+> `headers` 走 `Authorization: Bearer <token>` 请求头，token 不进 URL / 日志。`<你的CATEGRAF_TOKEN>` 填 `.env` 里那串 hex。若你的 categraf 版本不支持 `http_provider.headers`，需升级或保留该端点公开。
 
 然后重启 categraf：
 
@@ -82,13 +90,21 @@ systemctl restart categraf
 
 | 方法 | 路径 | 说明 | 需认证 |
 |------|------|------|--------|
-| GET | `/api/targets` | 查看所有目标 | 否 |
-| POST | `/api/targets` | 添加目标（JSON 或 Form） | 是 |
-| DELETE | `/api/targets/{id}` | 删除目标 | 否 |
-| POST | `/api/targets/{id}/edit` | 编辑目标 | 是 |
-| POST | `/api/targets/{id}/delete` | 删除目标（表单） | 是 |
-| GET | `/api/config/http_response` | categraf 配置拉取端点（含两插件） | 否 |
+| GET | `/api/targets` | 查看所有目标 | 是（cookie） |
+| POST | `/api/targets` | 添加目标（JSON 或 Form） | 是（cookie） |
+| DELETE | `/api/targets/{id}` | 删除目标 | 是（cookie） |
+| POST | `/api/targets/{id}/edit` | 编辑目标 | 是（cookie） |
+| POST | `/api/targets/{id}/delete` | 删除目标（表单） | 是（cookie） |
+| GET | `/api/config/http_response` | categraf 配置拉取端点（含两插件） | 配了 `CATEGRAF_TOKEN` 需 `Authorization: Bearer` |
 | GET | `/health` | 健康检查 | 否 |
+
+#### categraf 拉取认证
+
+- **Web 管理 API**（增删改查目标）走 session cookie：先 `POST /login` 拿 cookie 再带 cookie 调用，浏览器登录后天然带。
+- **categraf 拉取端点** `/api/config/http_response` 走独立的 `CATEGRAF_TOKEN`，用 `Authorization: Bearer <token>` 请求头校验（categraf 是后台进程，不走登录）。
+- 仅接受请求头，不接受 query——避免 token 落进 categraf 日志 / access log / URL。
+- token 比对用常量时间比较（`crypto/subtle`），防时序侧信道。
+- 页面"配置方式"提示行展示占位符 `Bearer <CATEGRAF_TOKEN>`，**不回显 token 明文**，从 `.env` 取值填入 categraf `config.toml`。
 
 ### 网站拨测（http_response）字段
 
@@ -176,13 +192,14 @@ systemctl status categraf-http-admin
 journalctl -u categraf-http-admin -f
 ```
 
-### 修改密码
+### 修改密码 / 轮换 token
 
 编辑 `.env` 文件后重启：
 
 ```bash
 vim /etc/categraf/.env
 systemctl restart categraf-http-admin
+# 轮换 CATEGRAF_TOKEN 后，同步更新 categraf conf/config.toml 里的 headers 并重启 categraf
 ```
 
 ### 不启用页面认证
@@ -195,7 +212,8 @@ systemctl restart categraf-http-admin
 |------|------|
 | `-data` | targets.json 路径（默认与二进制同目录） |
 | `-env-file` | .env 文件路径 |
-| `-user` / `-pass` | 直接指定认证账号（优先级高于 .env） |
+| `-user` / `-pass` | 直接指定登录账号（优先级高于 .env） |
+| `-categraf-token` | 直接指定 categraf 拉取 token（优先级高于 .env） |
 
 端口固定 5000。
 

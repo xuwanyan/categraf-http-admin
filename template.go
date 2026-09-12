@@ -71,7 +71,7 @@ tr:hover { background: #f8f9ff; }
 <strong>配置方式：</strong>
 Categraf <code>conf/config.toml</code> →
 <code>providers = ["local", "http"]</code> +
-<code>[http_provider] remote_url = "http://你的IP:{{.Port}}/api/config/http_response"</code>（同时下发网站与端口拨测）
+<code>[http_provider] remote_url = "http://你的IP:{{.Port}}/api/config/http_response"</code>{{if .CategrafHeaders}} + <code>{{.CategrafHeaders}}</code>（token 从 .env 的 CATEGRAF_TOKEN 取，勿用登录密码）{{else}}（同时下发网站与端口拨测）{{end}}
 </div>
 
 

@@ -2,3 +2,4 @@ categraf-http-admin.exe
 categraf-http-admin
 targets.json
 *.bak
+sandbox-cli/

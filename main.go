@@ -17,6 +17,7 @@ func main() {
 	dataFlag := flag.String("data", "", "targets.json 路径（默认同目录下的 targets.json）")
 	userFlag := flag.String("user", "", "登录用户名（不设则不启用页面认证）")
 	passFlag := flag.String("pass", "", "登录密码")
+	categrafTokenFlag := flag.String("categraf-token", "", "categraf http_provider 拉取配置用的独立 token（不设则该端点公开，建议设）")
 	flag.Parse()
 
 	// 加载 .env 文件
@@ -30,6 +31,10 @@ func main() {
 	user := firstNonEmpty(*userFlag, os.Getenv("CONFIG_USER"))
 	pass := firstNonEmpty(*passFlag, os.Getenv("CONFIG_PASS"))
 	InitAuth(user, pass)
+
+	// categraf 拉取 token：与登录账密解耦的独立凭据，仅用于 http_provider 拉配置
+	categrafTok := firstNonEmpty(*categrafTokenFlag, os.Getenv("CATEGRAF_TOKEN"))
+	InitCategrafToken(categrafTok)
 
 	// 默认配置
 	host := getEnv("HOST", "0.0.0.0")
@@ -68,6 +73,13 @@ func main() {
 	fmt.Printf("       remote_url = \"http://你的IP:%d/api/config/http_response\"\n", port)
 	fmt.Printf("       timeout = 5\n")
 	fmt.Printf("       reload_interval = 60\n")
+	fmt.Printf("\n")
+	if CategrafTokenEnabled() {
+		fmt.Printf("  categraf 拉取认证: 已启用（Authorization: Bearer <CATEGRAF_TOKEN>）\n")
+		fmt.Printf("  categraf config.toml 需配: headers = [\"Authorization\", \"Bearer <token>\"]\n")
+	} else {
+		fmt.Printf("  ⚠️  /api/config/http_response 未启用认证，建议在 .env 设 CATEGRAF_TOKEN\n")
+	}
 	fmt.Printf("\n")
 
 	if err := http.ListenAndServe(addr, handler); err != nil {

@@ -22,7 +22,7 @@ func newRouter(store *Store, port int) http.Handler {
 	// API（需认证）
 	mux.HandleFunc("GET /api/targets", requireAuth(handleListTargets(store)))
 	mux.HandleFunc("DELETE /api/targets/{id}", requireAuth(handleDeleteTarget(store)))
-	mux.HandleFunc("GET /api/config/http_response", handleCategrafConfig(store))
+	mux.HandleFunc("GET /api/config/http_response", requireCategrafToken(handleCategrafConfig(store)))
 
 	// 登录/登出
 	if AuthEnabled() {
@@ -75,24 +75,31 @@ func handleIndex(store *Store, port int) http.HandlerFunc {
 
 		errMsg := r.URL.Query().Get("error")
 
+		categrafHeaders := ""
+		if CategrafTokenEnabled() {
+			categrafHeaders = `headers = ["Authorization", "Bearer <CATEGRAF_TOKEN>"]`
+		}
+
 		data := struct {
-			Targets     []Target
-			TargetCount int
-			TOML        string
-			NetTOML     string
-			Version     string
-			Port        int
-			Jobs        []string
-			Error       string
+			Targets         []Target
+			TargetCount     int
+			TOML            string
+			NetTOML         string
+			Version         string
+			Port            int
+			Jobs            []string
+			Error           string
+			CategrafHeaders string
 		}{
-			Targets:     targets,
-			TargetCount: len(targets),
-			TOML:        generateTOML(targets),
-			NetTOML:     generateNetTOML(targets),
-			Version:     store.ConfigVersion(),
-			Port:        port,
-			Jobs:        jobs,
-			Error:       errMsg,
+			Targets:         targets,
+			TargetCount:     len(targets),
+			TOML:            generateTOML(targets),
+			NetTOML:         generateNetTOML(targets),
+			Version:         store.ConfigVersion(),
+			Port:            port,
+			Jobs:            jobs,
+			Error:           errMsg,
+			CategrafHeaders: categrafHeaders,
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
